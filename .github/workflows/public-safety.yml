@@ -1,0 +1,41 @@
+name: Public repository safety scan
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Block common secret patterns
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE --exclude-dir=.git --exclude='public-safety.yml'             '(sk-(proj-)?[A-Za-z0-9_-]{16,}|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=|OPENAI_API_KEY[[:space:]]*=|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)' .; then
+            echo "Potential secret detected."
+            exit 1
+          fi
+
+      - name: Block private implementation paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          banned='(^|/)(supabase/migrations|lib/marketing-os|app/api/analysis|customer-data|private)(/|$)'
+          if find . -type f -not -path './.git/*' | grep -Eq "$banned"; then
+            echo "Private implementation path detected."
+            exit 1
+          fi
+
+      - name: Block sensitive document formats
+        shell: bash
+        run: |
+          set -euo pipefail
+          if find . -type f \( -iname '*.docx' -o -iname '*.xlsx' -o -iname '*.csv' -o -iname '*.pdf' \) -print -quit | grep -q .; then
+            echo "Potential customer/export document detected."
+            exit 1
+          fi
